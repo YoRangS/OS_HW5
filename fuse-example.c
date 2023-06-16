@@ -97,7 +97,7 @@ void print_json (struct json_object * json)
 				printf("   name: %s\n", (char *) json_object_get_string(val)) ;
 			
 			if (strcmp(key, "entries") == 0) 
-				printf("   # entries: %d\n", json_object_array_length(val)) ;
+				printf("   # entries: %ld\n", json_object_array_length(val)) ;
 		}
 		printf("}\n") ;
 	}
