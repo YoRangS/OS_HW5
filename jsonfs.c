@@ -114,13 +114,15 @@ void print_json (struct json_object * json)
 			
 			if (strcmp(key, "entries") == 0) {
 				printf("   # entries: %d\n", json_object_array_length(val)) ;
-				for ( int j = 0 ; j < n ; j++ ) {
-                			struct json_object * entry = json_object_array_get_idx(obj, j);
+				for ( int j = 0 ; j < json_object_array_length(val) ; j++ ) {
+                			struct json_object * entry = json_object_array_get_idx(val, j);
 					json_object_object_foreach(entry, key2, val2) {
 						if(strcmp(key2, "name") == 0)
-							printf("   name: %s\n", (char *) json_object_get_string(val2));
+							printf("   \tname: %s\n", (char *) json_object_get_string(val2));
 						if(strcmp(key2, "inode") == 0)
-							printf("   inode: %d\n", (int) json_object_get_int(val2));
+							printf("   \tinode: %d\n", (int) json_object_get_int(val2));
+					}
+				}
 			}
 		}
 		printf("}\n") ;
