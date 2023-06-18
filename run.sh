@@ -2,5 +2,6 @@ set -x
 
 mkdir mnt
 
-./fuse_example ./mnt
+./jsonfs fs.json ./mnt
+#./fuse_example ./mnt
 #./fuse_example -d -f ./mnt
