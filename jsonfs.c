@@ -11,6 +11,7 @@
 static const char *filecontent = "I'm the content of the only file available there\n";
 
 json_object * json_objs[MAX_FILE] ;
+char * root_name;
 
 static int getattr_callback(const char *path, struct stat *stbuf) {
   memset(stbuf, 0, sizeof(struct stat));
@@ -71,17 +72,90 @@ static int read_callback(const char *path, char *buf, size_t size, off_t offset,
 }
 
 static int write_callback(const char *path,  const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
-    
-  
-  return -ENOENT;
+  FILE *file = fopen(path, "r+");
+  if (!file) {
+      return -errno;
+  }
+
+  if (fseek(file, offset, SEEK_SET) < 0) {
+      fclose(file);
+      return -errno;
+  }
+
+  size_t bytes_written = fwrite(buf, 1, size, file);
+  if (bytes_written < size) {
+      fclose(file);
+      return -errno;
+  }
+
+  fclose(file);
+
+  return bytes_written;
 }
 
-static void create_by_json() {
-  
+static int create_entries(struct json_object * entries, char* curr_path) {
+  for ( int i = 0 ; i < json_object_array_length(entries) ; i++ ) {
+    struct json_object * entry = json_object_array_get_idx(entries, i);
+    char * name;
+    int inode;
+    json_object_object_foreach(entry, key, val) {
+      if(strcmp(key, "name") == 0) {
+        name = (char *)malloc(strlen((char*)json_object_get_string(val)) + 1);
+        strcpy(name, (char *) json_object_get_string(val));       
+      }
+      if(strcmp(key, "inode") == 0)
+        inode = (int) json_object_get_int(val);
+    }
+    
+    char * path[1024];
+    strcpy(path, curr_path);
+    strcat(path, "/");
+    strcat(path, name);
+
+    struct json_object * _type = json_object_object_get(json_objs[inode], "type");
+    if (_type != NULL)
+      char * type = (char *) json_object_get_string(_type);
+
+    if (strcmp(type, "dir") == 0) {
+      mkdir_callback(path, 0755);
+      create_entries(json_object_object_get(json_objs[inode], "entries"), path);
+    }
+    else if (strcmp(type, "reg") == 0) {
+      struct fuse_file_info fi;
+      int res = create_callback(path, mode, &fi);
+      if (res != 0)
+        return res;
+      char buf[4096];
+      strcpy(buf, (char *) json_object_get_string(json_object_object_get(json_objs[inode], "data")));
+      size_t size = strlen(buf);
+      off_t offset = 0;
+
+      result = write_callback(path, buf, size, offset, &fi);
+      if (result != size)
+        return -EIO;
+    }
+  }
+  return 0;
+}
+
+static int mkdir_callback(const char *path, mode_t mode) {
+  int res = mkdir(path, mode);
+  if (res == -1) {
+      return -errno;
+  }
+  return 0;
 }
 
 static int init_callback(struct fuse_conn_info *conn, struct fuse_config *cfg) {
-  
+  struct json_object * root = json_objs[0];
+  json_object_object_foreach(root, key, val) {
+    if (strcmp(key, "entries") == 0) {
+      int res = create_entries(val, root_path);
+      if (res != 0)
+	return res;
+    }
+  }
+  return 0;
 }
 
 static struct fuse_operations fuse_example_operations = {
@@ -91,6 +165,7 @@ static struct fuse_operations fuse_example_operations = {
   .read = read_callback,
   .readdir = readdir_callback,
   .write = write_callback,
+  .mkdir = mkdir_callback,
 };
 
 
@@ -155,8 +230,7 @@ int main(int argc, char *argv[])
     new_argv[i-1] = (char *)malloc(strlen(argv[i]) + 1);
     strcpy(new_argv[i-1], argv[i]);
     if(argv[i][0] != '-') {
-      path = (char *)malloc(sizeof(char) * strlen(argv[i]) + 1);
-      strcpy(path, argv[i]);
+      strcpy(root_path, argv[i]);
     }
   }
 
@@ -164,7 +238,6 @@ int main(int argc, char *argv[])
   print_json(fs_json) ;
   init_inode(fs_json) ;
   json_object_put(fs_json) ;
-  free(path);
 
   int ret = fuse_main(argc-1, new_argv, &fuse_example_operations, NULL) ;
 
