@@ -1,10 +1,11 @@
-#define FUSE_USE_VERSION 26
+#define FUSE_USE_VERSION 31
 
 #include <stdio.h>
 #include <fuse.h>
 #include <string.h>
 #include <errno.h>
 #include <json.h>
+#include <dirent.h>
 
 #define MAX_FILE 128
 
@@ -34,41 +35,56 @@ static int getattr_callback(const char *path, struct stat *stbuf) {
 
 static int readdir_callback(const char *path, void *buf, fuse_fill_dir_t filler,
     off_t offset, struct fuse_file_info *fi) {
-
-  if (strcmp(path, "/") == 0) {
-
-	  filler(buf, ".", NULL, 0);
-	  filler(buf, "..", NULL, 0);
-	  filler(buf, "file", NULL, 0);
-	  return 0;
+    
+  DIR* dir = opendir(path);
+  if (dir == NULL) {
+    return -errno;
   }
 
-  return -ENOENT ;
-}
+  struct dirent* entry;
+  while ((entry = readdir(dir)) != NULL) {
+    if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+      continue;
+    }
 
+    filler(buf, entry->d_name, NULL, 0);
+  }
+
+  closedir(dir);
+
+  return 0;
+
+}
 static int open_callback(const char *path, struct fuse_file_info *fi) {
   return 0;
 }
 
 static int read_callback(const char *path, char *buf, size_t size, off_t offset,
     struct fuse_file_info *fi) {
-
-  if (strcmp(path, "/file") == 0) {
-    size_t len = strlen(filecontent);
-    if (offset >= len) {
-      return 0;
-    }
-
-    if (offset + size > len) {
-      memcpy(buf, filecontent + offset, len - offset);
-      return len - offset;
-    }
-
-    memcpy(buf, filecontent + offset, size);
-    return size;
+  
+  FILE* file = fopen(path, "rb");
+  if (file == NULL) {
+    return -errno;
   }
 
-  return -ENOENT;
+  fseek(file, 0, SEEK_END);
+  size_t file_size = ftell(file);
+  fseek(file, 0, SEEK_SET);
+
+  if (offset > file_size) {
+    fclose(file);
+    return 0;
+  }
+  if (offset + size > file_size) {
+    size = file_size - offset;
+  }
+
+  fseek(file, offset, SEEK_SET);
+  size_t bytes_read = fread(buf, 1, size, file);
+
+  fclose(file);
+
+  return bytes_read;
 }
 
 static int write_callback(const char *path,  const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
@@ -94,6 +110,14 @@ static int write_callback(const char *path,  const char *buf, size_t size, off_t
 }
 
 static int create_callback(const char *path, mode_t mode, struct fuse_file_info * fi) {
+  int res;
+
+  res = open(path, fi->flags, mode);
+  if(res == -1)
+    return -errno;
+
+  fi->fh = res;
+
   return 0;
 }
 
@@ -140,6 +164,7 @@ static int create_entries(struct json_object * entries, char* curr_path) {
     }
     else if (strcmp(type, "reg") == 0) {
       struct fuse_file_info fi;
+      fi.flags = O_CREAT;
       int res = create_callback(path, 0755, &fi);
       if (res != 0)
         return res;
