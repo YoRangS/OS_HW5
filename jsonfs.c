@@ -88,21 +88,29 @@ static int read_callback(const char *path, char *buf, size_t size, off_t offset,
 }
 
 static int write_callback(const char *path,  const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
-  FILE *file = fopen(path, "r+");
+  printf("w debug 0-1 %s\n", path);
+  FILE *file = fopen(path, "w+");
+  printf("w debug 0-2\n");
   if (!file) {
+      printf("w debug 1\n");
       return -errno;
   }
+  printf("w debug 0-3\n");
 
   if (fseek(file, offset, SEEK_SET) < 0) {
+      printf("w debug 2\n");
       fclose(file);
       return -errno;
   }
+  printf("w debug 0-4\n");
 
+  printf("w debug 3\n");
   size_t bytes_written = fwrite(buf, 1, size, file);
   if (bytes_written < size) {
       fclose(file);
       return -errno;
   }
+  printf("w debug 4\n");
 
   fclose(file);
 
@@ -110,13 +118,18 @@ static int write_callback(const char *path,  const char *buf, size_t size, off_t
 }
 
 static int create_callback(const char *path, mode_t mode, struct fuse_file_info * fi) {
+  printf("c debug\n");
   int res;
 
-  res = open(path, fi->flags, mode);
-  if(res == -1)
+  res = open_callback(path, fi);
+  if(res == -1) {
+    printf("c debug 1-1\n");
     return -errno;
+  }
+  printf("c debug 2\n");
 
   fi->fh = res;
+  printf("c debug 3 3 3\n");
 
   return 0;
 }
@@ -143,11 +156,12 @@ static int create_entries(struct json_object * entries, char* curr_path) {
       if(strcmp(key, "inode") == 0)
         inode = (int) json_object_get_int(val);
     }
-    
+    printf("debug\n"); 
     char path[1024];
     strcpy(path, curr_path);
     strcat(path, "/");
     strcat(path, name);
+    printf("path is %s\n", path);
 
     json_object * _type;
     json_object_object_get_ex(json_objs[inode], "type", &_type);
@@ -157,29 +171,44 @@ static int create_entries(struct json_object * entries, char* curr_path) {
     if (_type != NULL) {
       strcpy(type, (char *) json_object_get_string(_type));
     }
+    printf("debug2\n"); 
     if (strcmp(type, "dir") == 0) {
-      mkdir_callback(path, 0755);
+      printf("debug2-1\n"); 
+      int res = mkdir_callback(path, 0755);
+      if (res != 0)
+	return res;
+      printf("debug2-2\n"); 
       json_object * dir_entry;
       json_object_object_get_ex(json_objs[inode], "entries", &dir_entry);
       create_entries(dir_entry, path);
+      printf("debug2-3\n"); 
     }
     else if (strcmp(type, "reg") == 0) {
+      printf("debug2-4\n"); 
       struct fuse_file_info fi;
       fi.flags = O_CREAT;
+      printf("debug2-5\n"); 
       int res = create_callback(path, 0755, &fi);
       if (res != 0)
         return res;
+      printf("debug2-6\n"); 
       char buf[4096];
       json_object * _buf;
       json_object_object_get_ex(json_objs[inode], "data", &_buf);
+      printf("debug2-7\n"); 
       strcpy(buf, (char *) json_object_get_string(_buf));
       size_t size = strlen(buf);
       off_t offset = 0;
 
+      printf("debug2-8\n"); 
       result = write_callback(path, buf, size, offset, &fi);
-      if (result != size)
+      if (result != size) {
+        printf("debug2-8-1\n"); 
         return -EIO;
+      }
+      printf("debug2-9\n"); 
     }
+    printf("debug3\n"); 
   }
   return 0;
 }
@@ -260,55 +289,6 @@ void init_inode(struct json_object * json) {
     json_object_object_foreach(obj, key, val) {
       if (strcmp(key, "inode") == 0) {  
         json_objs[(int)json_object_get_int(val)] = obj ;
-	printf("put! %d\n", (int)json_object_get_int(val));
-	json_object_object_foreach(obj, key2, val2) {
-                        if (strcmp(key2, "inode") == 0)
-                                printf("   inode: %d\n", (int) json_object_get_int(val2)) ;
-
-                        if (strcmp(key2, "type") == 0)
-                                printf("   type: %s\n", (char *) json_object_get_string(val2)) ;
-
-                        if (strcmp(key2, "name" ) == 0)
-                                printf("   name: %s\n", (char *) json_object_get_string(val2)) ;
-
-                        if (strcmp(key2, "entries") == 0) {
-                                printf("   # entries: %d\n", json_object_array_length(val2)) ;
-                                for ( int j = 0 ; j < json_object_array_length(val2) ; j++ ) {
-                                        struct json_object * entry = json_object_array_get_idx(val2, j);
-                                        json_object_object_foreach(entry, key3, val3) {
-                                                if(strcmp(key3, "name") == 0)
-                                                        printf("   \tname: %s\n", (char *) json_object_get_string(val3));
-                                                if(strcmp(key3, "inode") == 0)
-                                                        printf("   \tinode: %d\n", (int) json_object_get_int(val3));
-                                        }
-                                }
-                        }
-                }
-	printf("objs[]:%p\tobj:%p\n", json_objs[(int)json_object_get_int(val)], obj);
-	json_object_object_foreach(json_objs[(int)json_object_get_int(val)], key4, val4) {
-                        if (strcmp(key4, "inode") == 0)
-                                printf("   inode: %d\n", (int) json_object_get_int(val4)) ;
-
-                        if (strcmp(key4, "type") == 0)
-                                printf("   type: %s\n", (char *) json_object_get_string(val4)) ;
-
-                        if (strcmp(key4, "name" ) == 0)
-                                printf("   name: %s\n", (char *) json_object_get_string(val4)) ;
-
-                        if (strcmp(key4, "entries") == 0) {
-                                printf("   # entries: %d\n", json_object_array_length(val4)) ;
-                                for ( int j = 0 ; j < json_object_array_length(val4) ; j++ ) {
-                                        struct json_object * entry = json_object_array_get_idx(val4, j);
-                                        json_object_object_foreach(entry, key5, val5) {
-                                                if(strcmp(key5, "name") == 0)
-                                                        printf("   \tname: %s\n", (char *) json_object_get_string(val5));
-                                                if(strcmp(key5, "inode") == 0)
-                                                        printf("   \tinode: %d\n", (int) json_object_get_int(val5));
-                                        }
-                                }
-                        }
-                }
-	printf("!!!objs[]:%p\tobj:%p\n", json_objs[(int)json_object_get_int(val)], obj);
 	break;
       }
     }
@@ -329,42 +309,16 @@ int main(int argc, char *argv[])
       strcpy(root_path, argv[i]);
     }
   }
+  printf("rootpath : %s\n", root_path);
 
   struct json_object * fs_json = json_object_from_file(argv[1]) ;
   print_json(fs_json) ;
   init_inode(fs_json) ;
-  json_object_put(fs_json) ;
 
   printf("after init_inode!\n");
-  for(int i = 0; i < 5; i++) {
-    printf("----%d----\n",i);
-		json_object_object_foreach(json_objs[i], key, val) {
-			if (strcmp(key, "inode") == 0) 
-				printf("   inode: %d\n", (int) json_object_get_int(val)) ;
-
-			if (strcmp(key, "type") == 0) 
-				printf("   type: %s\n", (char *) json_object_get_string(val)) ;
-
-			if (strcmp(key, "name" ) == 0)
-				printf("   name: %s\n", (char *) json_object_get_string(val)) ;
-			
-			if (strcmp(key, "entries") == 0) {
-				printf("   # entries: %d\n", json_object_array_length(val)) ;
-				for ( int j = 0 ; j < json_object_array_length(val) ; j++ ) {
-                			struct json_object * entry = json_object_array_get_idx(val, j);
-					json_object_object_foreach(entry, key2, val2) {
-						if(strcmp(key2, "name") == 0)
-							printf("   \tname: %s\n", (char *) json_object_get_string(val2));
-						if(strcmp(key2, "inode") == 0)
-							printf("   \tinode: %d\n", (int) json_object_get_int(val2));
-					}
-				}
-			}
-		}
-  }
-  printf("end test!!!!!!!!!!!\n");
   int ret = fuse_main(argc-1, new_argv, &fuse_example_operations, NULL) ;
 
+  json_object_put(fs_json) ;
   for(i = 0; i < argc - 1; i++) {
     free(new_argv[i]);
   }
