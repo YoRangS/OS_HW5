@@ -88,29 +88,21 @@ static int read_callback(const char *path, char *buf, size_t size, off_t offset,
 }
 
 static int write_callback(const char *path,  const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
-  printf("w debug 0-1 %s\n", path);
   FILE *file = fopen(path, "w+");
-  printf("w debug 0-2\n");
   if (!file) {
-      printf("w debug 1\n");
       return -errno;
   }
-  printf("w debug 0-3\n");
 
   if (fseek(file, offset, SEEK_SET) < 0) {
-      printf("w debug 2\n");
       fclose(file);
       return -errno;
   }
-  printf("w debug 0-4\n");
 
-  printf("w debug 3\n");
   size_t bytes_written = fwrite(buf, 1, size, file);
   if (bytes_written < size) {
       fclose(file);
       return -errno;
   }
-  printf("w debug 4\n");
 
   fclose(file);
 
@@ -118,18 +110,14 @@ static int write_callback(const char *path,  const char *buf, size_t size, off_t
 }
 
 static int create_callback(const char *path, mode_t mode, struct fuse_file_info * fi) {
-  printf("c debug\n");
   int res;
 
   res = open_callback(path, fi);
   if(res == -1) {
-    printf("c debug 1-1\n");
     return -errno;
   }
-  printf("c debug 2\n");
 
   fi->fh = res;
-  printf("c debug 3 3 3\n");
 
   return 0;
 }
@@ -143,7 +131,6 @@ static int mkdir_callback(const char *path, mode_t mode) {
 }
 
 static int create_entries(struct json_object * entries, char* curr_path) {
-  printf("create_entries gogogogo\n");
   for ( int i = 0 ; i < json_object_array_length(entries) ; i++ ) {
     struct json_object * entry = json_object_array_get_idx(entries, i);
     char * name;
@@ -156,12 +143,10 @@ static int create_entries(struct json_object * entries, char* curr_path) {
       if(strcmp(key, "inode") == 0)
         inode = (int) json_object_get_int(val);
     }
-    printf("debug\n"); 
     char path[1024];
     strcpy(path, curr_path);
     strcat(path, "/");
     strcat(path, name);
-    printf("path is %s\n", path);
 
     json_object * _type;
     json_object_object_get_ex(json_objs[inode], "type", &_type);
@@ -171,65 +156,44 @@ static int create_entries(struct json_object * entries, char* curr_path) {
     if (_type != NULL) {
       strcpy(type, (char *) json_object_get_string(_type));
     }
-    printf("debug2\n"); 
     if (strcmp(type, "dir") == 0) {
-      printf("debug2-1\n"); 
       int res = mkdir_callback(path, 0755);
       if (res != 0)
 	return res;
-      printf("debug2-2\n"); 
       json_object * dir_entry;
       json_object_object_get_ex(json_objs[inode], "entries", &dir_entry);
       create_entries(dir_entry, path);
-      printf("debug2-3\n"); 
     }
     else if (strcmp(type, "reg") == 0) {
-      printf("debug2-4\n"); 
       struct fuse_file_info fi;
       fi.flags = O_CREAT;
-      printf("debug2-5\n"); 
       int res = create_callback(path, 0755, &fi);
       if (res != 0)
         return res;
-      printf("debug2-6\n"); 
       char buf[4096];
       json_object * _buf;
       json_object_object_get_ex(json_objs[inode], "data", &_buf);
-      printf("debug2-7\n"); 
       strcpy(buf, (char *) json_object_get_string(_buf));
       size_t size = strlen(buf);
       off_t offset = 0;
 
-      printf("debug2-8\n"); 
       result = write_callback(path, buf, size, offset, &fi);
       if (result != size) {
-        printf("debug2-8-1\n"); 
         return -EIO;
       }
-      printf("debug2-9\n"); 
     }
-    printf("debug3\n"); 
   }
   return 0;
 }
 
 static void * init_callback(struct fuse_conn_info *conn/*, struct fuse_config *cfg*/) {
-  //struct json_object * root = json_objs[0];
-  //printf("root:%p\tobjs[]:%p\n", root, json_objs[0]);
-  printf("start!\n");
-  //if (root == NULL) {
-   // printf("NULL!!\n");
-  //}
-  printf("whyytyyyyyy\n");
   json_object_object_foreach(json_objs[0], key, val) {
-    printf("create!\n");
     if (strcmp(key, "entries") == 0) {
       int res = create_entries(val, root_path);
       if (res != 0)
 	return NULL; // need to manage error
     }
   }
-  printf("end!\n");
   return NULL;
 }
 
@@ -309,13 +273,11 @@ int main(int argc, char *argv[])
       strcpy(root_path, argv[i]);
     }
   }
-  printf("rootpath : %s\n", root_path);
 
   struct json_object * fs_json = json_object_from_file(argv[1]) ;
   print_json(fs_json) ;
   init_inode(fs_json) ;
 
-  printf("after init_inode!\n");
   int ret = fuse_main(argc-1, new_argv, &fuse_example_operations, NULL) ;
 
   json_object_put(fs_json) ;
