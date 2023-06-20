@@ -130,6 +130,7 @@ static int mkdir_callback(const char *path, mode_t mode) {
 }
 
 static int create_entries(struct json_object * entries, char* curr_path) {
+  printf("create_entries gogogogo\n");
   for ( int i = 0 ; i < json_object_array_length(entries) ; i++ ) {
     struct json_object * entry = json_object_array_get_idx(entries, i);
     char * name;
@@ -184,14 +185,22 @@ static int create_entries(struct json_object * entries, char* curr_path) {
 }
 
 static void * init_callback(struct fuse_conn_info *conn/*, struct fuse_config *cfg*/) {
-  struct json_object * root = json_objs[0];
-  json_object_object_foreach(root, key, val) {
+  //struct json_object * root = json_objs[0];
+  //printf("root:%p\tobjs[]:%p\n", root, json_objs[0]);
+  printf("start!\n");
+  //if (root == NULL) {
+   // printf("NULL!!\n");
+  //}
+  printf("whyytyyyyyy\n");
+  json_object_object_foreach(json_objs[0], key, val) {
+    printf("create!\n");
     if (strcmp(key, "entries") == 0) {
       int res = create_entries(val, root_path);
       if (res != 0)
 	return NULL; // need to manage error
     }
   }
+  printf("end!\n");
   return NULL;
 }
 
@@ -210,6 +219,7 @@ static struct fuse_operations fuse_example_operations = {
 void print_json (struct json_object * json) 
 {
 	int n = json_object_array_length(json);
+	printf("length: %d\n", n);
 
 	for ( int i = 0 ; i < n ; i++ ) {
 		struct json_object * obj = json_object_array_get_idx(json, i);
@@ -250,7 +260,56 @@ void init_inode(struct json_object * json) {
     json_object_object_foreach(obj, key, val) {
       if (strcmp(key, "inode") == 0) {  
         json_objs[(int)json_object_get_int(val)] = obj ;
-        break;
+	printf("put! %d\n", (int)json_object_get_int(val));
+	json_object_object_foreach(obj, key2, val2) {
+                        if (strcmp(key2, "inode") == 0)
+                                printf("   inode: %d\n", (int) json_object_get_int(val2)) ;
+
+                        if (strcmp(key2, "type") == 0)
+                                printf("   type: %s\n", (char *) json_object_get_string(val2)) ;
+
+                        if (strcmp(key2, "name" ) == 0)
+                                printf("   name: %s\n", (char *) json_object_get_string(val2)) ;
+
+                        if (strcmp(key2, "entries") == 0) {
+                                printf("   # entries: %d\n", json_object_array_length(val2)) ;
+                                for ( int j = 0 ; j < json_object_array_length(val2) ; j++ ) {
+                                        struct json_object * entry = json_object_array_get_idx(val2, j);
+                                        json_object_object_foreach(entry, key3, val3) {
+                                                if(strcmp(key3, "name") == 0)
+                                                        printf("   \tname: %s\n", (char *) json_object_get_string(val3));
+                                                if(strcmp(key3, "inode") == 0)
+                                                        printf("   \tinode: %d\n", (int) json_object_get_int(val3));
+                                        }
+                                }
+                        }
+                }
+	printf("objs[]:%p\tobj:%p\n", json_objs[(int)json_object_get_int(val)], obj);
+	json_object_object_foreach(json_objs[(int)json_object_get_int(val)], key4, val4) {
+                        if (strcmp(key4, "inode") == 0)
+                                printf("   inode: %d\n", (int) json_object_get_int(val4)) ;
+
+                        if (strcmp(key4, "type") == 0)
+                                printf("   type: %s\n", (char *) json_object_get_string(val4)) ;
+
+                        if (strcmp(key4, "name" ) == 0)
+                                printf("   name: %s\n", (char *) json_object_get_string(val4)) ;
+
+                        if (strcmp(key4, "entries") == 0) {
+                                printf("   # entries: %d\n", json_object_array_length(val4)) ;
+                                for ( int j = 0 ; j < json_object_array_length(val4) ; j++ ) {
+                                        struct json_object * entry = json_object_array_get_idx(val4, j);
+                                        json_object_object_foreach(entry, key5, val5) {
+                                                if(strcmp(key5, "name") == 0)
+                                                        printf("   \tname: %s\n", (char *) json_object_get_string(val5));
+                                                if(strcmp(key5, "inode") == 0)
+                                                        printf("   \tinode: %d\n", (int) json_object_get_int(val5));
+                                        }
+                                }
+                        }
+                }
+	printf("!!!objs[]:%p\tobj:%p\n", json_objs[(int)json_object_get_int(val)], obj);
+	break;
       }
     }
   }
@@ -277,7 +336,33 @@ int main(int argc, char *argv[])
   json_object_put(fs_json) ;
 
   printf("after init_inode!\n");
+  for(int i = 0; i < 5; i++) {
+    printf("----%d----\n",i);
+		json_object_object_foreach(json_objs[i], key, val) {
+			if (strcmp(key, "inode") == 0) 
+				printf("   inode: %d\n", (int) json_object_get_int(val)) ;
 
+			if (strcmp(key, "type") == 0) 
+				printf("   type: %s\n", (char *) json_object_get_string(val)) ;
+
+			if (strcmp(key, "name" ) == 0)
+				printf("   name: %s\n", (char *) json_object_get_string(val)) ;
+			
+			if (strcmp(key, "entries") == 0) {
+				printf("   # entries: %d\n", json_object_array_length(val)) ;
+				for ( int j = 0 ; j < json_object_array_length(val) ; j++ ) {
+                			struct json_object * entry = json_object_array_get_idx(val, j);
+					json_object_object_foreach(entry, key2, val2) {
+						if(strcmp(key2, "name") == 0)
+							printf("   \tname: %s\n", (char *) json_object_get_string(val2));
+						if(strcmp(key2, "inode") == 0)
+							printf("   \tinode: %d\n", (int) json_object_get_int(val2));
+					}
+				}
+			}
+		}
+  }
+  printf("end test!!!!!!!!!!!\n");
   int ret = fuse_main(argc-1, new_argv, &fuse_example_operations, NULL) ;
 
   for(i = 0; i < argc - 1; i++) {
